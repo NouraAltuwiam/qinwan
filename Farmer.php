@@ -104,6 +104,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: Farmer.php'); exit;
     }
 
+    // إضافة عرض استثمار لمزرعة
+    if ($act === 'add_offer') {
+        $farm_id    = (int)($_POST['offer_farm_id'] ?? 0);
+        $area_size  = (float)($_POST['area_size']   ?? 0);
+        $price      = (float)($_POST['price']       ?? 0);
+
+        if ($farm_id && $area_size > 0 && $price > 0) {
+            // تأكد أن المزرعة تخص هذا المزارع وأنها معتمدة
+            $chk = $pdo->prepare("SELECT farm_id, total_area_sqm FROM qw_farm WHERE farm_id=? AND farmer_id=? AND farm_status='approved'");
+            $chk->execute([$farm_id, $farmer_id]);
+            $farmRow = $chk->fetch();
+            if ($farmRow) {
+                if ($area_size > $farmRow['total_area_sqm']) {
+                    $_SESSION['flash_error'] = 'مساحة العرض أكبر من مساحة المزرعة الكلية.';
+                } else {
+                    $pdo->prepare("INSERT INTO qw_farm_offer (farm_id, area_size, price) VALUES (?,?,?)")
+                        ->execute([$farm_id, $area_size, $price]);
+                    try { $pdo->prepare("INSERT INTO qw_activity_log (user_id,action_type,entity_type,entity_id) VALUES (?,'add_offer','farm',?)")->execute([$_SESSION['user_id'],$farm_id]); } catch(Exception $e){}
+                    $_SESSION['flash'] = 'تم إضافة العرض بنجاح. يمكن للمستثمرين الآن رؤيته.';
+                }
+            } else {
+                $_SESSION['flash_error'] = 'المزرعة غير موجودة أو غير معتمدة بعد. يجب أن تكون المزرعة معتمدة من الإدارة أولاً.';
+            }
+        } else {
+            $_SESSION['flash_error'] = 'يرجى تعبئة جميع حقول العرض.';
+        }
+        header('Location: Farmer.php'); exit;
+    }
+
     // US-09: Post update
     if ($act === 'post_update') {
         $farm_id = (int)($_POST['farm_id'] ?? 0);
@@ -132,6 +161,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $farmsStmt = $pdo->prepare("SELECT * FROM qw_farm WHERE farmer_id = ? ORDER BY created_at DESC");
 $farmsStmt->execute([$farmer_id]);
 $myFarms = $farmsStmt->fetchAll();
+
+// جلب العروض الخاصة بمزارع هذا المزارع
+$offersStmt = $pdo->prepare("
+    SELECT fo.*, f.name AS farm_name, f.farm_status
+    FROM qw_farm_offer fo
+    JOIN qw_farm f ON fo.farm_id = f.farm_id
+    WHERE f.farmer_id = ?
+    ORDER BY fo.offer_id DESC
+");
+$offersStmt->execute([$farmer_id]);
+$myOffers = $offersStmt->fetchAll();
+
+// المزارع المعتمدة فقط (لإضافة عروض عليها)
+$approvedFarmsForOffer = array_filter($myFarms, fn($f) => $f['farm_status'] === 'approved');
 
 // US-10: Dashboard stats
 $statsStmt = $pdo->prepare("
@@ -214,6 +257,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
     <div class="nav-links">
       <button class="nav-link active" onclick="showPage('dashboard')">لوحة التحكم</button>
       <button class="nav-link"        onclick="showPage('add-farm')">إضافة مزرعة</button>
+      <button class="nav-link"        onclick="showPage('offers')">عروض الاستثمار</button>
       <button class="nav-link"        onclick="showPage('requests')">طلبات الاستثمار</button>
       <button class="nav-link"        onclick="showPage('send-update')">نشر تحديث</button>
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
@@ -355,6 +399,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
     <div class="nav-links">
       <button class="nav-link"        onclick="showPage('dashboard')">لوحة التحكم</button>
       <button class="nav-link"        onclick="showPage('add-farm')">إضافة مزرعة</button>
+      <button class="nav-link"        onclick="showPage('offers')">عروض الاستثمار</button>
       <button class="nav-link"        onclick="showPage('requests')">طلبات الاستثمار</button>
       <button class="nav-link active" onclick="showPage('send-update')">نشر تحديث</button>
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
@@ -432,6 +477,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
     <div class="nav-links">
       <button class="nav-link"        onclick="showPage('dashboard')">لوحة التحكم</button>
       <button class="nav-link active" onclick="showPage('add-farm')">إضافة مزرعة</button>
+      <button class="nav-link"        onclick="showPage('offers')">عروض الاستثمار</button>
       <button class="nav-link"        onclick="showPage('requests')">طلبات الاستثمار</button>
       <button class="nav-link"        onclick="showPage('send-update')">نشر تحديث</button>
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
@@ -519,6 +565,122 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
 </div>
 
 <!-- ============================================================
+     صفحة عروض الاستثمار
+     ============================================================ -->
+<div class="page" id="page-offers">
+  <nav>
+    <button class="nav-back" onclick="showPage('dashboard')">العودة للرئيسية</button>
+    <div class="nav-links">
+      <button class="nav-link"        onclick="showPage('dashboard')">لوحة التحكم</button>
+      <button class="nav-link"        onclick="showPage('add-farm')">إضافة مزرعة</button>
+      <button class="nav-link active" onclick="showPage('offers')">عروض الاستثمار</button>
+      <button class="nav-link"        onclick="showPage('requests')">طلبات الاستثمار</button>
+      <button class="nav-link"        onclick="showPage('send-update')">نشر تحديث</button>
+      <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
+    </div>
+    <div class="nav-logo" onclick="showPage('dashboard')">
+      <img class="logo-img" src="logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <div class="logo-fallback" style="display:none">ق</div>
+      <div><span class="logo-name">قِنوان</span><span class="logo-sub">المزارع</span></div>
+    </div>
+  </nav>
+
+  <div class="page-content">
+    <div class="page-title-wrap">
+      <h1 class="page-title">عروض الاستثمار</h1>
+      <div class="title-ornament">
+        <div class="orn-line" style="width:60px"></div>
+        <div class="orn-diamond"></div><div class="orn-dot"></div>
+        <div class="orn-diamond"></div>
+        <div class="orn-line" style="width:24px"></div>
+      </div>
+    </div>
+
+    <!-- فورم إضافة عرض جديد -->
+    <div class="form-card" style="max-width:680px; margin-bottom:32px;">
+      <h3 style="font-family:'Amiri',serif;font-size:18px;color:var(--brown-dark);margin-bottom:18px;">➕ إضافة عرض جديد</h3>
+
+      <?php if (empty($approvedFarmsForOffer)): ?>
+        <div class="auth-error" style="margin-bottom:0;">
+          ⚠️ لا توجد مزارع معتمدة حالياً. يجب أن تكون المزرعة معتمدة من الإدارة أولاً قبل إضافة عروض عليها.
+        </div>
+      <?php else: ?>
+        <form method="POST" action="Farmer.php" id="addOfferForm">
+          <input type="hidden" name="act" value="add_offer" />
+
+          <div class="form-group">
+            <label class="form-label">اختر المزرعة <span style="color:red">*</span></label>
+            <select name="offer_farm_id" class="form-select" required>
+              <option value="" disabled selected>اختر المزرعة</option>
+              <?php foreach ($approvedFarmsForOffer as $af): ?>
+                <option value="<?= $af['farm_id'] ?>">
+                  <?= htmlspecialchars($af['name']) ?> — <?= htmlspecialchars($af['region']) ?> (<?= number_format($af['total_area_sqm'], 0) ?> م²)
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">مساحة العرض (م²) <span style="color:red">*</span></label>
+              <input type="number" name="area_size" class="form-input" placeholder="مثال: 500" min="1" step="0.01" required />
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">السعر لكل م² (ريال) <span style="color:red">*</span></label>
+              <input type="number" name="price" class="form-input" placeholder="مثال: 150" min="1" step="0.01" required />
+            </div>
+          </div>
+          <div style="margin-bottom:18px"></div>
+
+          <button type="submit" class="btn-primary">💰 إضافة العرض</button>
+        </form>
+      <?php endif; ?>
+    </div>
+
+    <!-- قائمة العروض الحالية -->
+    <div class="section-title">عروضي الحالية (<?= count($myOffers) ?>)</div>
+
+    <?php if (empty($myOffers)): ?>
+      <div class="empty-state-msg">لا توجد عروض مضافة حتى الآن.</div>
+    <?php else: ?>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
+          <thead>
+            <tr style="background:var(--green-dark);color:#fff;font-size:14px;">
+              <th style="padding:12px 16px;text-align:right;">المزرعة</th>
+              <th style="padding:12px 16px;text-align:right;">المساحة (م²)</th>
+              <th style="padding:12px 16px;text-align:right;">السعر/م²</th>
+              <th style="padding:12px 16px;text-align:right;">إجمالي القيمة</th>
+              <th style="padding:12px 16px;text-align:right;">حالة المزرعة</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($myOffers as $i => $offer): ?>
+              <tr style="border-bottom:1px solid var(--border-light);background:<?= $i % 2 === 0 ? '#fff' : '#f9fafb' ?>;">
+                <td style="padding:12px 16px;font-weight:600;color:var(--brown-dark);">
+                  🌴 <?= htmlspecialchars($offer['farm_name']) ?>
+                </td>
+                <td style="padding:12px 16px;"><?= number_format($offer['area_size'], 0) ?> م²</td>
+                <td style="padding:12px 16px;"><?= number_format($offer['price'], 2) ?> ر.س</td>
+                <td style="padding:12px 16px;color:var(--green-dark);font-weight:700;">
+                  <?= number_format($offer['area_size'] * $offer['price'], 0) ?> ر.س
+                </td>
+                <td style="padding:12px 16px;">
+                  <?php
+                    $fsMap = ['approved'=>'✅ معتمدة','pending'=>'⏳ قيد المراجعة','rejected'=>'❌ مرفوضة','deactivated'=>'⛔ معطلة'];
+                    echo $fsMap[$offer['farm_status']] ?? $offer['farm_status'];
+                  ?>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    <?php endif; ?>
+  </div>
+</div>
+
+<!-- ============================================================
      صفحة 4 — طلبات الاستثمار (US-06, US-07, US-08, US-11)
      ============================================================ -->
 <div class="page" id="page-requests">
@@ -527,6 +689,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
     <div class="nav-links">
       <button class="nav-link"        onclick="showPage('dashboard')">لوحة التحكم</button>
       <button class="nav-link"        onclick="showPage('add-farm')">إضافة مزرعة</button>
+      <button class="nav-link"        onclick="showPage('offers')">عروض الاستثمار</button>
       <button class="nav-link active" onclick="showPage('requests')">طلبات الاستثمار</button>
       <button class="nav-link"        onclick="showPage('send-update')">نشر تحديث</button>
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
