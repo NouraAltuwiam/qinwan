@@ -394,7 +394,13 @@ $regions   = array_unique(array_column($farms, 'region'));
     <div id="no-results" style="display:none;text-align:center;padding:48px;color:var(--text-faint);">لا توجد مزارع تطابق الفلاتر المحددة.</div>
 
     <!-- Map view (US-04) -->
-    <div id="view-map" style="display:none;margin-bottom:22px;"><div id="leaflet-map"></div></div>
+    <div id="view-map" style="display:none;margin-bottom:22px;">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;padding-right:4px;">
+        🗺 <span id="map-count"><?= count($farms) ?> مزرعة على الخريطة</span>
+        <span style="font-size:12px;color:var(--text-faint);margin-right:8px;">— الفلاتر تطبق تلقائياً</span>
+      </div>
+      <div id="leaflet-map"></div>
+    </div>
 
     <!-- List view (US-05) -->
     <div id="view-list">
@@ -675,6 +681,9 @@ function applyFilters() {
   });
 
   document.getElementById('no-results').style.display = (visible === 0) ? 'block' : 'none';
+
+  // تحديث الخريطة بنفس الفلاتر
+  updateMapMarkers();
 }
 
 function clearFilters() {
@@ -881,6 +890,7 @@ function submitRating() {
 
 // ── Map (US-04) ───────────────────────────────────────────
 let leafletMap = null, mapInit = false;
+let mapMarkers = []; // تتبع كل البنز الحالية
 
 function switchView(view) {
   const lv = document.getElementById('view-list');
@@ -891,7 +901,7 @@ function switchView(view) {
     lv.style.display = 'none'; mv.style.display = 'block';
     bl.classList.remove('active'); bm.classList.add('active');
     if (!mapInit) setTimeout(initLeaflet, 80);
-    else leafletMap.invalidateSize();
+    else { leafletMap.invalidateSize(); updateMapMarkers(); }
   } else {
     lv.style.display = 'block'; mv.style.display = 'none';
     bl.classList.add('active'); bm.classList.remove('active');
@@ -909,22 +919,42 @@ const FARM_COORDS = {
   'نجران':           [17.56, 44.22],
 };
 
-function initLeaflet() {
-  if (mapInit) return;
-  leafletMap = L.map('leaflet-map', { center: [24.5, 44.5], zoom: 6 });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap', maxZoom: 18
-  }).addTo(leafletMap);
+// إزالة كل البنز من الخريطة
+function clearMapMarkers() {
+  mapMarkers.forEach(m => leafletMap.removeLayer(m));
+  mapMarkers = [];
+}
 
-  PHP_FARMS.forEach(farm => {
+// رسم بنز الخريطة بناءً على الفلاتر الحالية
+function updateMapMarkers() {
+  if (!mapInit) return;
+  clearMapMarkers();
+
+  const q      = document.getElementById('farmSearch').value.toLowerCase();
+  const region = document.getElementById('regionFilter').value;
+  const size   = document.getElementById('sizeFilter').value;
+
+  const filteredFarms = PHP_FARMS.filter(farm => {
+    const matchName   = (farm.name + ' ' + farm.region + ' ' + farm.palm_type).toLowerCase().includes(q);
+    const matchRegion = (region === 'all' || farm.region === region);
+    const matchPalm   = (activePalm === 'all' || farm.palm_type === activePalm);
+    const area        = parseFloat(farm.total_area_sqm) || 0;
+    let matchSize     = true;
+    if (size === '0-500')    matchSize = area <= 500;
+    if (size === '500-2000') matchSize = area > 500 && area <= 2000;
+    if (size === '2000+')    matchSize = area > 2000;
+    return matchName && matchRegion && matchPalm && matchSize;
+  });
+
+  filteredFarms.forEach(farm => {
     const coords = FARM_COORDS[farm.region] || [24.5, 44.5];
-    const jitter = [coords[0] + (Math.random()-0.5)*0.5, coords[1] + (Math.random()-0.5)*0.5];
+    const jitter = [coords[0] + (Math.random()-0.5)*0.3, coords[1] + (Math.random()-0.5)*0.3];
     const icon = L.divIcon({
       className: '',
       html: `<div style="background:var(--green-dark);color:var(--gold-light);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid var(--gold);box-shadow:0 2px 8px rgba(0,0,0,0.3);">🌴</div>`,
       iconSize: [32,32], iconAnchor: [16,32], popupAnchor: [0,-36]
     });
-    L.marker(jitter, { icon }).addTo(leafletMap).bindPopup(`
+    const marker = L.marker(jitter, { icon }).bindPopup(`
       <div dir="rtl" style="text-align:right;font-family:'Noto Naskh Arabic',serif;min-width:200px;">
         <strong style="color:var(--green-dark);font-size:15px;">${farm.name}</strong><br>
         <span style="font-size:12px;color:#666;">${farm.region} · ${farm.palm_type}</span><br>
@@ -935,8 +965,30 @@ function initLeaflet() {
         </button>
       </div>
     `);
+    marker.addTo(leafletMap);
+    mapMarkers.push(marker);
   });
+
+  // إذا فيه منطقة محددة، زوّم عليها
+  if (region !== 'all' && FARM_COORDS[region]) {
+    leafletMap.flyTo(FARM_COORDS[region], 9, { animate: true, duration: 0.8 });
+  } else if (filteredFarms.length > 0) {
+    leafletMap.setView([24.5, 44.5], 6);
+  }
+
+  // تحديث عداد النتائج على الخريطة
+  const counter = document.getElementById('map-count');
+  if (counter) counter.textContent = `${filteredFarms.length} مزرعة على الخريطة`;
+}
+
+function initLeaflet() {
+  if (mapInit) return;
+  leafletMap = L.map('leaflet-map', { center: [24.5, 44.5], zoom: 6 });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap', maxZoom: 18
+  }).addTo(leafletMap);
   mapInit = true;
+  updateMapMarkers();
 }
 </script>
 </body>
