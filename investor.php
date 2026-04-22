@@ -391,13 +391,28 @@ $regions   = array_unique(array_column($farms, 'region'));
       <?php endforeach; ?>
     </div>
 
-    <div id="no-results" style="display:none;text-align:center;padding:48px;color:var(--text-faint);">لا توجد مزارع تطابق الفلاتر المحددة.</div>
+    <div id="no-results" style="display:none;text-align:center;padding:48px 24px;color:var(--text-faint);">
+      <div style="font-size:48px;margin-bottom:12px;">🔍</div>
+      <div style="font-size:17px;font-weight:700;color:var(--brown-dark);margin-bottom:8px;">لا توجد مزارع تطابق الفلاتر</div>
+      <div style="font-size:13px;margin-bottom:18px;">جرّب تغيير المنطقة أو نوع النخيل أو المساحة</div>
+      <button onclick="clearFilters()" style="background:var(--green-dark);color:#fff;border:none;border-radius:30px;padding:10px 24px;font-family:'Noto Naskh Arabic',serif;font-size:14px;cursor:pointer;">
+        🔄 مسح الفلاتر
+      </button>
+    </div>
 
     <!-- Map view (US-04) -->
     <div id="view-map" style="display:none;margin-bottom:22px;">
       <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;padding-right:4px;">
         🗺 <span id="map-count"><?= count($farms) ?> مزرعة على الخريطة</span>
         <span style="font-size:12px;color:var(--text-faint);margin-right:8px;">— الفلاتر تطبق تلقائياً</span>
+      </div>
+      <div id="map-no-results" style="display:none;text-align:center;padding:80px 24px;background:#fff;border-radius:var(--radius);border:1.5px dashed var(--border);">
+        <div style="font-size:48px;margin-bottom:12px;">🗺️</div>
+        <div style="font-size:17px;font-weight:700;color:var(--brown-dark);margin-bottom:8px;">لا توجد مزارع على الخريطة</div>
+        <div style="font-size:13px;color:var(--text-faint);margin-bottom:18px;">لا توجد مزارع تطابق الفلاتر المحددة في هذه المنطقة</div>
+        <button onclick="clearFilters()" style="background:var(--green-dark);color:#fff;border:none;border-radius:30px;padding:10px 24px;font-family:'Noto Naskh Arabic',serif;font-size:14px;cursor:pointer;">
+          🔄 مسح الفلاتر
+        </button>
       </div>
       <div id="leaflet-map"></div>
     </div>
@@ -979,6 +994,20 @@ function updateMapMarkers() {
   // تحديث عداد النتائج على الخريطة
   const counter = document.getElementById('map-count');
   if (counter) counter.textContent = `${filteredFarms.length} مزرعة على الخريطة`;
+
+  // إظهار أو إخفاء رسالة "لا توجد نتائج" على الخريطة
+  const mapNoResults = document.getElementById('map-no-results');
+  const leafletDiv   = document.getElementById('leaflet-map');
+  if (mapNoResults && leafletDiv) {
+    if (filteredFarms.length === 0) {
+      mapNoResults.style.display = 'block';
+      leafletDiv.style.display   = 'none';
+    } else {
+      mapNoResults.style.display = 'none';
+      leafletDiv.style.display   = 'block';
+      leafletMap.invalidateSize();
+    }
+  }
 }
 
 function initLeaflet() {
