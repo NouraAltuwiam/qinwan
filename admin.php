@@ -46,7 +46,7 @@ $monthlyData = $monthlyStmt->fetchAll();
         <a href="logout.php"             class="nav-link nav-logout">خروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="window.location.href='admin.php'">
-        <img class="logo-img" src="logo.png" alt="قنوان"
+        <img class="logo-img" src="images\logo.png" alt="قنوان"
              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
         <div class="logo-fallback" style="display:none">ق</div>
         <div>

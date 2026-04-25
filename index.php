@@ -22,7 +22,7 @@ $totalInvestors = (int)$pdo->query("SELECT COUNT(*) FROM qw_investor")->fetchCol
 <!-- شريط التنقل -->
 <nav>
   <div class="nav-logo" onclick="window.location.href='index.php'">
-    <img class="logo-img" src="logo.png" alt="قِنوان"
+    <img class="logo-img" src="images\logo.png" alt="قِنوان"
          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
     <div class="logo-fallback" style="display:none">ق</div>
     <div>
@@ -157,7 +157,7 @@ $totalInvestors = (int)$pdo->query("SELECT COUNT(*) FROM qw_investor")->fetchCol
   <div class="footer-container">
     <div class="footer-column">
       <div class="footer-logo">
-        <img src="logo.png" alt="قِنوان" style="height:44px;width:auto;border-radius:4px;"
+        <img src="images\logo.png" alt="قِنوان" style="height:44px;width:auto;border-radius:4px;"
              onerror="this.style.display='none';">
         <h3>قِنوان</h3>
       </div>

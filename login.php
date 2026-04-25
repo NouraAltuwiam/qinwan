@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="auth-box">
 
       <div class="auth-logo">
-        <img class="auth-logo-img" src="logo.png" alt="قِنوان"
+        <img class="auth-logo-img" src="images\logo.png" alt="قِنوان"
              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
         <div class="auth-logo-fallback" style="display:none">ق</div>
       </div>

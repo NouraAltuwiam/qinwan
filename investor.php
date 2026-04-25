@@ -257,7 +257,7 @@ $regions   = array_unique(array_column($farms, 'region'));
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="showPage('dashboard')">
-      <img class="logo-img" src="logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <img class="logo-img" src="images\logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="logo-fallback" style="display:none">ق</div>
       <div><span class="logo-name">قِنوان</span><span class="logo-sub">المستثمر</span></div>
     </div>
@@ -347,7 +347,7 @@ $regions   = array_unique(array_column($farms, 'region'));
       <a href="logout.php" class="nav-link nav-logout">خروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="showPage('dashboard')">
-      <img class="logo-img" src="logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <img class="logo-img" src="images\logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="logo-fallback" style="display:none">ق</div>
       <div><span class="logo-name">قِنوان</span><span class="logo-sub">المستثمر</span></div>
     </div>
@@ -487,7 +487,7 @@ $regions   = array_unique(array_column($farms, 'region'));
       <a href="logout.php" class="nav-link nav-logout">خروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="showPage('dashboard')">
-      <img class="logo-img" src="logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <img class="logo-img" src="images\logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="logo-fallback" style="display:none">ق</div>
       <div><span class="logo-name">قِنوان</span><span class="logo-sub">المستثمر</span></div>
     </div>
@@ -531,7 +531,7 @@ $regions   = array_unique(array_column($farms, 'region'));
       <a href="logout.php" class="nav-link nav-logout">خروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="showPage('dashboard')">
-      <img class="logo-img" src="logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <img class="logo-img" src="images\logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="logo-fallback" style="display:none">ق</div>
       <div><span class="logo-name">قِنوان</span><span class="logo-sub">المستثمر</span></div>
     </div>
