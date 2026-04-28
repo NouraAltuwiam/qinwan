@@ -1,7 +1,6 @@
 <?php
 // ============================================================
 // قِنوان — activity-logs.php  (US-Admin-10)
-// Creates qw_activity_log table if not exists, displays real logs
 // ============================================================
 require_once 'db_connect.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -9,7 +8,7 @@ if (empty($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') { header('Loca
 
 $pdo = getDB();
 
-// Create activity log table if it does not exist
+// ✅ Create table + ip_address column
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS qw_activity_log (
         log_id       INT          NOT NULL AUTO_INCREMENT,
@@ -17,6 +16,7 @@ $pdo->exec("
         action_type  VARCHAR(80)  NOT NULL,
         entity_type  VARCHAR(80)  DEFAULT NULL,
         entity_id    INT          DEFAULT NULL,
+        ip_address   VARCHAR(45)  DEFAULT NULL,
         created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (log_id),
         KEY idx_user  (user_id),
@@ -24,10 +24,14 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ");
 
-// Seed some useful baseline logs from existing data if table is empty
+// ✅ أضف ip_address لو الجدول موجود من قبل بدونها
+try {
+    $pdo->exec("ALTER TABLE qw_activity_log ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45) DEFAULT NULL");
+} catch(Exception $e) {}
+
+// Seed baseline logs if table is empty
 $cnt = (int)$pdo->query("SELECT COUNT(*) FROM qw_activity_log")->fetchColumn();
 if ($cnt === 0) {
-    // Seed from investment requests (accepted/rejected)
     $pdo->exec("
         INSERT IGNORE INTO qw_activity_log (user_id, action_type, entity_type, entity_id, created_at)
         SELECT u.user_id,
@@ -38,13 +42,11 @@ if ($cnt === 0) {
         JOIN qw_user u ON inv.user_id = u.user_id
         LIMIT 50
     ");
-    // Seed farm approvals
     $pdo->exec("
         INSERT IGNORE INTO qw_activity_log (user_id, action_type, entity_type, entity_id, created_at)
         SELECT COALESCE(f.approved_by, 1), 'approve_farm', 'farm', f.farm_id, f.created_at
         FROM qw_farm f WHERE f.farm_status = 'approved' LIMIT 20
     ");
-    // Seed farmer verifications
     $pdo->exec("
         INSERT IGNORE INTO qw_activity_log (user_id, action_type, entity_type, entity_id, created_at)
         SELECT COALESCE(fr.verified_by, 1), 'verified_farmer', 'farmer', fr.farmer_id, fr.verified_at
@@ -52,26 +54,25 @@ if ($cnt === 0) {
     ");
 }
 
-// Date filters
+// Filters
 $dateFrom = $_GET['date_from'] ?? '';
 $dateTo   = $_GET['date_to']   ?? '';
 $search   = trim($_GET['search'] ?? '');
 
-$where = [];
-$params = [];
-
+$where = []; $params = [];
 if ($dateFrom) { $where[] = 'al.created_at >= ?'; $params[] = $dateFrom . ' 00:00:00'; }
 if ($dateTo)   { $where[] = 'al.created_at <= ?'; $params[] = $dateTo   . ' 23:59:59'; }
 if ($search)   {
-    $where[]  = '(u.first_name LIKE ? OR u.last_name LIKE ? OR al.action_type LIKE ? OR al.entity_type LIKE ?)';
+    $where[] = '(u.first_name LIKE ? OR u.last_name LIKE ? OR al.action_type LIKE ? OR al.entity_type LIKE ?)';
     $s = '%' . $search . '%';
     array_push($params, $s, $s, $s, $s);
 }
-
 $whereSQL = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
+// ✅ نجيب ip_address
 $logsStmt = $pdo->prepare("
-    SELECT al.log_id, al.user_id, al.action_type, al.entity_type, al.entity_id, al.created_at,
+    SELECT al.log_id, al.user_id, al.action_type, al.entity_type, al.entity_id,
+           al.ip_address, al.created_at,
            u.first_name, u.last_name, u.role
     FROM qw_activity_log al
     JOIN qw_user u ON al.user_id = u.user_id
@@ -82,25 +83,35 @@ $logsStmt = $pdo->prepare("
 $logsStmt->execute($params);
 $logs = $logsStmt->fetchAll();
 
+// ✅ Action labels كاملة (نسختها + إضافاتنا)
 $actionLabels = [
-    'login'               => 'تسجيل دخول',
-    'register'            => 'تسجيل حساب جديد',
-    'add_farm'            => 'إضافة مزرعة',
-    'edit_farm'           => 'تعديل مزرعة',
-    'approve_farm'        => 'اعتماد مزرعة',
-    'approved_farm'       => 'اعتماد مزرعة',
-    'rejected_farm'       => 'رفض مزرعة',
-    'deactivated_farm'    => 'تعطيل مزرعة',
-    'submit_request'      => 'تقديم طلب استثمار',
-    'accept_request'      => 'قبول طلب استثمار',
-    'reject_request'      => 'رفض طلب استثمار',
-    'post_update'         => 'نشر تحديث مزرعة',
-    'delete_content'      => 'حذف محتوى مخالف',
-    'edit_content'        => 'تعديل محتوى',
-    'update_complaint'    => 'تحديث حالة شكوى',
-    'verified_farmer'     => 'توثيق مزارع',
-    'verified_farmer'     => 'توثيق مزارع',
-    'rejected_farmer'     => 'رفض توثيق مزارع',
+    'login'                  => 'تسجيل دخول',
+    'register'               => 'تسجيل حساب جديد',
+    'add_farm'               => 'إضافة مزرعة',
+    'edit_farm'              => 'تعديل مزرعة',
+    'approve_farm'           => 'اعتماد مزرعة',
+    'approved_farm'          => 'اعتماد مزرعة',
+    'rejected_farm'          => 'رفض مزرعة',
+    'deactivated_farm'       => 'تعطيل مزرعة',
+    'delete_farm'            => 'حذف مزرعة',
+    'submit_request'         => 'تقديم طلب استثمار',
+    'accept_request'         => 'قبول طلب استثمار',
+    'cancel_request'         => 'إلغاء طلب استثمار',
+    'reject_request'         => 'رفض طلب استثمار',
+    'post_update'            => 'نشر تحديث مزرعة',
+    'approve_content'        => 'قبول محتوى',
+    'reject_content'         => 'رفض محتوى',
+    'delete_content'         => 'حذف محتوى مخالف',
+    'edit_content'           => 'تعديل محتوى',
+    'update_complaint'       => 'تحديث حالة شكوى',
+    'submit_complaint'       => 'تقديم شكوى',
+    'verified_farmer'        => 'توثيق مزارع',
+    'rejected_farmer'        => 'رفض توثيق مزارع',
+    'request_more_info'      => 'طلب معلومات إضافية',
+    'harvest_change_request' => 'طلب تغيير طريقة الحصاد',
+    'decide_harvest_change'  => 'البت في طلب تغيير الحصاد',
+    'suspend'                => 'إيقاف مستخدم',
+    'activate'               => 'تفعيل مستخدم',
 ];
 ?>
 <!DOCTYPE html>
@@ -109,17 +120,48 @@ $actionLabels = [
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>سجل النشاط - قنوان</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* ✅ تنبيه القراءة فقط */
+        .readonly-notice {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-right: 4px solid #f59e0b;
+            color: #92400e;
+            padding: 10px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        /* ✅ عمود IP */
+        .ip-cell {
+            font-size: 11px;
+            color: #9ca3af;
+            font-family: monospace;
+            direction: ltr;
+            text-align: left;
+        }
+        .action-badge {
+            background: var(--bg-section);
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+    </style>
 </head>
 <body>
 <nav>
     <a href="admin.php" class="nav-back">← لوحة الإدارة</a>
     <div class="nav-links">
-        <a href="admin.php"          class="nav-link">لوحة الإدارة</a>
-        <a href="activity-logs.php"  class="nav-link active">سجل النشاط</a>
-        <a href="logout.php"         class="nav-link nav-logout">خروج 🚪</a>
+        <a href="admin.php"         class="nav-link">لوحة الإدارة</a>
+        <a href="activity-logs.php" class="nav-link active">سجل النشاط</a>
+        <a href="logout.php"        class="nav-link nav-logout">خروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="window.location.href='admin.php'">
-        <img class="logo-img" src="images\logo.png" alt="قنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
+        <!-- ✅ مسار الصورة حسب نسختها -->
+        <img class="logo-img" src="images\logo.png" alt="قنوان"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
         <div class="logo-fallback" style="display:none">ق</div>
         <div><span class="logo-name">قنوان</span><span class="logo-sub">الإدارة</span></div>
     </div>
@@ -131,12 +173,17 @@ $actionLabels = [
         <p>تدقيق جميع إجراءات النظام والمستخدمين — السجلات للقراءة فقط ولا يمكن تعديلها أو حذفها.</p>
     </section>
 
-    <!-- Filters -->
+    <!-- ✅ تنبيه القراءة فقط (إضافة جديدة) -->
+    <div class="readonly-notice">
+        🔒 هذه السجلات للقراءة فقط — لا يمكن لأي مستخدم تعديلها أو حذفها
+    </div>
+
+    <!-- Filters (نفس نسختها) -->
     <form method="GET" action="activity-logs.php">
         <section class="admin-toolbar">
-            <input type="text"  name="search"    value="<?= htmlspecialchars($search) ?>"   placeholder="ابحث بالاسم أو نوع الإجراء">
-            <input type="date"  name="date_from" value="<?= htmlspecialchars($dateFrom) ?>"  title="من تاريخ">
-            <input type="date"  name="date_to"   value="<?= htmlspecialchars($dateTo) ?>"    title="إلى تاريخ">
+            <input type="text"  name="search"    value="<?= htmlspecialchars($search) ?>"  placeholder="ابحث بالاسم أو نوع الإجراء">
+            <input type="date"  name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" title="من تاريخ">
+            <input type="date"  name="date_to"   value="<?= htmlspecialchars($dateTo) ?>"   title="إلى تاريخ">
             <button type="submit" class="admin-action-btn btn-primary" style="flex-shrink:0;">🔍 بحث</button>
             <a href="activity-logs.php" class="admin-action-btn btn-secondary" style="text-decoration:none;padding:13px 16px;">إعادة تعيين</a>
         </section>
@@ -146,6 +193,7 @@ $actionLabels = [
         عدد السجلات: <?= count($logs) ?>
     </div>
 
+    <!-- ✅ الجدول مع عمود IP الجديد -->
     <section class="admin-table-wrapper">
         <table class="admin-table">
             <thead>
@@ -156,24 +204,25 @@ $actionLabels = [
                     <th>الدور</th>
                     <th>نوع الإجراء</th>
                     <th>الكيان المتأثر</th>
-                    <th>الوقت</th>
+                    <th>عنوان IP</th>
+                    <th>الوقت والتاريخ</th>
                 </tr>
             </thead>
             <tbody>
             <?php if (empty($logs)): ?>
-                <tr><td colspan="7" style="text-align:center;color:var(--text-faint);padding:32px;">لا توجد سجلات تطابق البحث.</td></tr>
+                <tr><td colspan="8" style="text-align:center;color:var(--text-faint);padding:32px;">لا توجد سجلات تطابق البحث.</td></tr>
             <?php else: ?>
                 <?php foreach ($logs as $log): ?>
                 <tr>
                     <td style="color:var(--text-faint);font-size:12px;"><?= $log['log_id'] ?></td>
-                    <td><?= $log['user_id'] ?></td>
+                    <td style="font-weight:700;"><?= $log['user_id'] ?></td>
                     <td><?= htmlspecialchars($log['first_name'].' '.$log['last_name']) ?></td>
                     <td><?php
                         $r=['farmer'=>'مزارع','investor'=>'مستثمر','admin'=>'مدير'];
                         echo $r[$log['role']] ?? $log['role'];
                     ?></td>
                     <td>
-                        <span style="background:var(--bg-section);padding:3px 10px;border-radius:6px;font-size:13px;">
+                        <span class="action-badge">
                             <?= $actionLabels[$log['action_type']] ?? htmlspecialchars($log['action_type']) ?>
                         </span>
                     </td>
@@ -182,13 +231,25 @@ $actionLabels = [
                             <?= htmlspecialchars($log['entity_type']) ?> #<?= $log['entity_id'] ?>
                         <?php else: echo '—'; endif; ?>
                     </td>
-                    <td style="font-size:13px;white-space:nowrap;"><?= date('Y-m-d H:i', strtotime($log['created_at'])) ?></td>
+                    <!-- ✅ عمود IP (إضافة جديدة) -->
+                    <td class="ip-cell">
+                        <?= $log['ip_address'] ? htmlspecialchars($log['ip_address']) : '—' ?>
+                    </td>
+                    <!-- ✅ وقت بالثواني (أدق من نسختها) -->
+                    <td style="font-size:13px;white-space:nowrap;">
+                        <?= date('Y-m-d H:i:s', strtotime($log['created_at'])) ?>
+                    </td>
                 </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
             </tbody>
         </table>
     </section>
+
+    <!-- ✅ تذكير القراءة فقط في الأسفل (إضافة جديدة) -->
+    <div style="color:var(--text-faint);font-size:12px;margin-top:16px;text-align:center;">
+        🔒 السجلات محمية — لا توجد خيارات للتعديل أو الحذف
+    </div>
 </main>
 </body>
 </html>
