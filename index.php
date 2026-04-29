@@ -3,11 +3,31 @@
 // قِنوان — index.php  (Home page with real stats)
 // ============================================================
 require_once 'db_connect.php';
+if (session_status() === PHP_SESSION_NONE) session_start();
+
 $pdo = getDB();
-$approvedFarms = (int)$pdo->query("SELECT COUNT(*) FROM qw_farm WHERE farm_status='approved'")->fetchColumn();
-$totalUsers    = (int)$pdo->query("SELECT COUNT(*) FROM qw_user")->fetchColumn();
-$txVolume      = (float)$pdo->query("SELECT COALESCE(SUM(amount),0) FROM qw_transaction WHERE payment_status='paid'")->fetchColumn();
+$approvedFarms  = (int)$pdo->query("SELECT COUNT(*) FROM qw_farm WHERE farm_status='approved'")->fetchColumn();
+$totalUsers     = (int)$pdo->query("SELECT COUNT(*) FROM qw_user")->fetchColumn();
+$txVolume       = (float)$pdo->query("SELECT COALESCE(SUM(amount),0) FROM qw_transaction WHERE payment_status='paid'")->fetchColumn();
 $totalInvestors = (int)$pdo->query("SELECT COUNT(*) FROM qw_investor")->fetchColumn();
+
+$loggedIn  = !empty($_SESSION['user_id']);
+$role      = $_SESSION['role'] ?? '';
+$firstName = $_SESSION['first_name'] ?? '';
+
+// تحديد صفحة المستخدم حسب الدور
+$dashboardUrl = match($role) {
+    'farmer'   => 'Farmer.php',
+    'investor' => 'investor.php',
+    'admin'    => 'admin.php',
+    default    => 'index.php',
+};
+$dashboardLabel = match($role) {
+    'farmer'   => 'لوحة المزارع',
+    'investor' => 'لوحة المستثمر',
+    'admin'    => 'لوحة الإدارة',
+    default    => '',
+};
 ?>
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -22,7 +42,7 @@ $totalInvestors = (int)$pdo->query("SELECT COUNT(*) FROM qw_investor")->fetchCol
 <!-- شريط التنقل -->
 <nav>
   <div class="nav-logo" onclick="window.location.href='index.php'">
-    <img class="logo-img" src="images\logo.png" alt="قِنوان"
+    <img class="logo-img" src="images/logo.png" alt="قِنوان"
          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
     <div class="logo-fallback" style="display:none">ق</div>
     <div>
@@ -31,12 +51,20 @@ $totalInvestors = (int)$pdo->query("SELECT COUNT(*) FROM qw_investor")->fetchCol
     </div>
   </div>
   <div class="nav-links">
-    <a href="index.php"    class="nav-link active">الرئيسية</a>
-    <a href="investor.php" class="nav-link">المستثمر</a>
-    <a href="Farmer.php"   class="nav-link">المزارع</a>
-    <a href="admin.php"    class="nav-link">المشرف</a>
-    <a href="login.php"    class="nav-link">تسجيل الدخول</a>
-    <a href="register.php" class="nav-link btn-nav">ابدأ الآن</a>
+    <?php if ($loggedIn && $role): ?>
+      <!-- مستخدم مسجّل: الرئيسية + صفحته فقط -->
+      <a href="index.php"        class="nav-link active">الرئيسية</a>
+      <a href="<?= $dashboardUrl ?>" class="nav-link btn-nav"><?= $dashboardLabel ?></a>
+      <a href="logout.php"       class="nav-link nav-logout">تسجيل الخروج 🚪</a>
+    <?php else: ?>
+      <!-- زائر: القائمة الكاملة -->
+      <a href="index.php"    class="nav-link active">الرئيسية</a>
+      <a href="investor.php" class="nav-link">المستثمر</a>
+      <a href="Farmer.php"   class="nav-link">المزارع</a>
+      <a href="admin.php"    class="nav-link">المشرف</a>
+      <a href="login.php"    class="nav-link">تسجيل الدخول</a>
+      <a href="register.php" class="nav-link btn-nav">ابدأ الآن</a>
+    <?php endif; ?>
   </div>
 </nav>
 
@@ -55,7 +83,6 @@ $totalInvestors = (int)$pdo->query("SELECT COUNT(*) FROM qw_investor")->fetchCol
       <a href="#about"       class="btn-outline">تعرف علينا</a>
     </div>
   </div>
-</section>
 </section>
 
 <!-- من نحن -->
@@ -196,5 +223,6 @@ $totalInvestors = (int)$pdo->query("SELECT COUNT(*) FROM qw_investor")->fetchCol
     <p>© ٢٠٢٦ قِنوان. جميع الحقوق محفوظة</p>
   </div>
 </footer>
+
 </body>
 </html>
