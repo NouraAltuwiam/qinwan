@@ -44,6 +44,10 @@ $totalInvestors = (int)$pdo->query("SELECT COUNT(*) FROM qw_investor")->fetchCol
 <section class="hero-section">
   <div class="hero-overlay"></div>
   <div class="hero-content">
+    <div class="hero-logo-wrap">
+      <img src="images/logo.png" alt="قِنوان"
+           onerror="this.style.display='none';" />
+    </div>
     <h1 class="hero-title">استثمر في مزارع النخيل<br>بثقة وشفافية</h1>
     <p class="hero-subtitle">منصة رقمية متكاملة تربط المستثمرين بأصحاب مزارع النخيل في المملكة العربية السعودية</p>
     <div class="hero-buttons">
@@ -51,6 +55,7 @@ $totalInvestors = (int)$pdo->query("SELECT COUNT(*) FROM qw_investor")->fetchCol
       <a href="#about"       class="btn-outline">تعرف علينا</a>
     </div>
   </div>
+</section>
 </section>
 
 <!-- من نحن -->
@@ -191,6 +196,5 @@ $totalInvestors = (int)$pdo->query("SELECT COUNT(*) FROM qw_investor")->fetchCol
     <p>© ٢٠٢٦ قِنوان. جميع الحقوق محفوظة</p>
   </div>
 </footer>
-
 </body>
 </html>

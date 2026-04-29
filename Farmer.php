@@ -11,8 +11,25 @@ if (empty($_SESSION['user_id']) || $_SESSION['role'] !== 'farmer') {
 }
 
 $pdo        = getDB();
-$farmer_id  = (int)$_SESSION['farmer_id'];
-$first_name = $_SESSION['first_name'];
+$stmt = $pdo->prepare("SELECT farmer_id FROM qw_farmer WHERE user_id = ?");
+$stmt->execute([$_SESSION['user_id']]);
+$farmerRow = $stmt->fetch();
+
+if (!$farmerRow) {
+    $natid = 'F' . $_SESSION['user_id'] . rand(1000, 9999);
+
+    $stmt = $pdo->prepare("
+        INSERT INTO qw_farmer (user_id, national_id, verification_status)
+        VALUES (?, ?, 'pending')
+    ");
+    $stmt->execute([$_SESSION['user_id'], $natid]);
+
+    $farmer_id = (int)$pdo->lastInsertId();
+} else {
+    $farmer_id = (int)$farmerRow['farmer_id'];
+}
+
+$_SESSION['farmer_id'] = $farmer_id;$first_name = $_SESSION['first_name'];
 $last_name  = $_SESSION['last_name'] ?? '';
 
 // ── معالجة POST ──────────────────────────────────────────
@@ -73,23 +90,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // US-04: Add farm
-    if ($act === 'add_farm') {
-        $name      = trim($_POST['name']        ?? '');
-        $region    = trim($_POST['region']      ?? '');
-        $palm_type = trim($_POST['palm_type']   ?? '');
-        $date_type = trim($_POST['date_type']   ?? '');
-        $area      = (float)($_POST['area']     ?? 0);
+    // US-04: Add farm
+  if ($act === 'add_farm') {
+    try {
+        $name      = trim($_POST['name'] ?? '');
+        $region    = trim($_POST['region'] ?? '');
+        $palm_type = trim($_POST['palm_type'] ?? '');
+        $date_type = trim($_POST['date_type'] ?? '');
+        $area      = (float)($_POST['area'] ?? 0);
         $desc      = trim($_POST['description'] ?? '');
+        $yield_kg  = (float)($_POST['yield_kg'] ?? 0);
 
         if ($name && $region && $palm_type && $date_type && $area > 0) {
-            // Check for duplicate (US-04: prevent duplicate name+region)
             $dup = $pdo->prepare("SELECT farm_id FROM qw_farm WHERE farmer_id=? AND name=? AND region=?");
             $dup->execute([$farmer_id, $name, $region]);
+
             if (!$dup->fetch()) {
-                $pdo->prepare("INSERT INTO qw_farm (farmer_id, name, region, total_area_sqm, palm_type, date_type, description) VALUES (?,?,?,?,?,?,?)")
-                    ->execute([$farmer_id, $name, $region, $area, $palm_type, $date_type, $desc]);
+                $stmt = $pdo->prepare("
+                    INSERT INTO qw_farm
+                    (farmer_id, name, region, total_area_sqm, palm_type, date_type, description, expected_yield_kg, farm_status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+                ");
+                $stmt->execute([$farmer_id, $name, $region, $area, $palm_type, $date_type, $desc, $yield_kg]);
+
                 $new_farm_id = $pdo->lastInsertId();
-                try { $pdo->prepare("INSERT INTO qw_activity_log (user_id,action_type,entity_type,entity_id) VALUES (?,'add_farm','farm',?)")->execute([$_SESSION['user_id'],$new_farm_id]); } catch(Exception $e){}
+                logActivity($_SESSION['user_id'], 'add_farm', 'farm', $new_farm_id);
+
                 $_SESSION['flash'] = 'تم تقديم طلب تسجيل المزرعة. ستتم مراجعتها من قبل الإدارة.';
             } else {
                 $_SESSION['flash_error'] = 'مزرعة بنفس الاسم والمنطقة مسجلة مسبقاً.';
@@ -97,8 +123,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $_SESSION['flash_error'] = 'يرجى تعبئة جميع الحقول المطلوبة.';
         }
-        header('Location: Farmer.php'); exit;
+
+    } catch (Exception $e) {
+        $_SESSION['flash_error'] = 'خطأ أثناء إضافة المزرعة: ' . $e->getMessage();
     }
+
+    header('Location: Farmer.php');
+    exit;
+}
 
     // US-05: Edit farm
     if ($act === 'edit_farm') {
@@ -299,9 +331,10 @@ $pendingHCR = count(array_filter($harvestChangeRequests, fn($h) => $h['hcr_statu
 // US-10: Dashboard stats
 $statsStmt = $pdo->prepare("
     SELECT
-        COALESCE(SUM(f.total_area_sqm),0)     AS total_area,
-        COUNT(DISTINCT ir.investor_id)          AS active_investors,
-        COALESCE(SUM(ir.area_sqm),0)           AS leased_area
+        COALESCE(SUM(f.total_area_sqm),0)       AS total_area,
+        COUNT(DISTINCT ir.investor_id)            AS active_investors,
+        COALESCE(SUM(ir.area_sqm),0)             AS leased_area,
+        COALESCE(SUM(f.expected_yield_kg),0)     AS expected_yield
     FROM qw_farm f
     LEFT JOIN qw_farm_offer fo ON fo.farm_id = f.farm_id
     LEFT JOIN qw_investment_request ir ON ir.offer_id = fo.offer_id AND ir.req_status = 'accepted'
@@ -309,7 +342,7 @@ $statsStmt = $pdo->prepare("
 ");
 $statsStmt->execute([$farmer_id]);
 $stats = $statsStmt->fetch();
-$remaining_area = max(0, $stats['total_area'] - $stats['leased_area']);
+$remaining_area    = max(0, $stats['total_area'] - $stats['leased_area']);
 $estimated_revenue = round($stats['leased_area'] * 150, 2); // avg 150 SAR/m²
 
 // US-06: Investment requests
@@ -401,7 +434,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="showPage('dashboard')">
-      <img class="logo-img" src="logo.png" alt="قِنوان"
+      <img class="logo-img" src="images/logo.png" alt="قِنوان"
            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="logo-fallback" style="display:none">ق</div>
       <div><span class="logo-name">قِنوان</span><span class="logo-sub">المزارع</span></div>
@@ -429,6 +462,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
     </div>
 
     <!-- US-10: Stats from real DB -->
+    <!-- US-10: Stats from real DB -->
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-label">المساحة الكلية</div>
@@ -445,6 +479,10 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
       <div class="stat-card">
         <div class="stat-label">المستثمرون النشطون</div>
         <div class="stat-value"><?= $stats['active_investors'] ?></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">الإنتاج المتوقع (كجم/موسم)</div>
+        <div class="stat-value"><?= number_format($stats['expected_yield'], 0) ?> كجم</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">الإيرادات المتوقعة</div>
@@ -490,7 +528,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="showPage('dashboard')">
-      <img class="logo-img" src="logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <img class="logo-img" src="images/logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="logo-fallback" style="display:none">ق</div>
       <div><span class="logo-name">قِنوان</span><span class="logo-sub">المزارع</span></div>
     </div>
@@ -544,7 +582,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="showPage('dashboard')">
-      <img class="logo-img" src="logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <img class="logo-img" src="images/logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="logo-fallback" style="display:none">ق</div>
       <div><span class="logo-name">قِنوان</span><span class="logo-sub">المزارع</span></div>
     </div>
@@ -623,7 +661,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="showPage('dashboard')">
-      <img class="logo-img" src="logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <img class="logo-img" src="images/logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="logo-fallback" style="display:none">ق</div>
       <div><span class="logo-name">قِنوان</span><span class="logo-sub">المزارع</span></div>
     </div>
@@ -720,7 +758,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="showPage('dashboard')">
-      <img class="logo-img" src="logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <img class="logo-img" src="images/logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="logo-fallback" style="display:none">ق</div>
       <div><span class="logo-name">قِنوان</span><span class="logo-sub">المزارع</span></div>
     </div>
@@ -836,7 +874,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="showPage('dashboard')">
-      <img class="logo-img" src="logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <img class="logo-img" src="images/logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="logo-fallback" style="display:none">ق</div>
       <div><span class="logo-name">قِنوان</span><span class="logo-sub">المزارع</span></div>
     </div>
@@ -947,7 +985,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="showPage('dashboard')">
-      <img class="logo-img" src="logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <img class="logo-img" src="images/logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="logo-fallback" style="display:none">ق</div>
       <div><span class="logo-name">قِنوان</span><span class="logo-sub">المزارع</span></div>
     </div>
@@ -1050,7 +1088,7 @@ unset($_SESSION['flash'], $_SESSION['flash_error']);
       <a href="logout.php" class="nav-link nav-logout">تسجيل الخروج 🚪</a>
     </div>
     <div class="nav-logo" onclick="showPage('dashboard')">
-      <img class="logo-img" src="logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <img class="logo-img" src="images/logo.png" alt="قِنوان" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="logo-fallback" style="display:none">ق</div>
       <div><span class="logo-name">قِنوان</span><span class="logo-sub">المزارع</span></div>
     </div>
