@@ -53,7 +53,7 @@ The platform supports three user roles: **Investor**, **Farmer**, and **Admin** 
 
 ## 🔗 رابط زيارة الموقع | Live Site
 
-**🌐 الموقع | Website:** `[ضيفي الرابط هنا هنا | Add your link here]`
+**🌐 الموقع | Website:** `[(https://qinwan.infinityfreeapp.com/index.php)]`
 
 ---
 
