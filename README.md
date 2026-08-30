@@ -9,9 +9,7 @@
 
 ---
 
-## 📖 نبذة عن المشروع | About the Project
-
-### بالعربي
+### نبذه
 
 **قِنوان** هي منصة رقمية تربط المستثمرين الأفراد بمزارعي النخيل في المملكة العربية السعودية، وتتيح الاستثمار الجزئي (Fractional Investment) في مزارع نخيل محددة دون الحاجة لامتلاك أرض أو رأس مال كبير.
 
@@ -19,7 +17,7 @@
 
 المنصة تشمل ثلاثة أنواع مستخدمين: **مستثمر**، **مزارع**، و**مسؤول (Admin)** يتولى مراجعة واعتماد المزارع والمستخدمين ومراقبة المعاملات.
 
-### In English
+
 
 **Qinwan** is a web-based platform that bridges the gap between individual investors and date palm farm owners across Saudi Arabia, enabling **fractional agricultural investment** in specific plots of land without requiring investors to own farmland or have large capital.
 
@@ -29,8 +27,7 @@ The platform supports three user roles: **Investor**, **Farmer**, and **Admin** 
 
 ---
 
-## ✨ أبرز الميزات | Key Features
-
+## ابرز المميزات
 | العربي | English |
 |---|---|
 | تصفح المزارع عبر خريطة أو قائمة | Browse farms via interactive map or list |
@@ -55,9 +52,6 @@ The platform supports three user roles: **Investor**, **Farmer**, and **Admin** 
 ---
 
 ## 🔗 رابط زيارة الموقع | Live Site
-
-> ⚠️ **ملاحظة:** لم يتم توفير رابط استضافة فعلي بعد — الرجاء إضافته هنا عند رفع المشروع.
-> ⚠️ **Note:** No live hosting link has been provided yet — please add it here once deployed.
 
 **🌐 الموقع | Website:** `[ضيفي الرابط هنا هنا | Add your link here]`
 
